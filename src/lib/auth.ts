@@ -1,12 +1,15 @@
 import { type ReactNode } from "react";
-import { hashToken } from "@/lib/crypto";
+import { hashToken, hashPassword } from "@/lib/crypto";
+export { hashToken, hashPassword };
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 // ==========================================================================
 // Configurações (lidas de .env)
 // ==========================================================================
 
-// E-mails autorizados para criar conta automaticamente
-// Formato: "email1@dominio.com,email2@dominio.com"
+// E-mails autorizados. Se vazio, qualquer e-mail válido pode criar conta.
 export const ALLOWED_EMAILS = process.env.ALLOWED_EMAILS 
   ? process.env.ALLOWED_EMAILS.split(",").map(e => e.trim()).filter(Boolean)
   : [];
@@ -123,10 +126,60 @@ export function validateSession(token: string | string[] | null): {
 }
 
 /**
- * Verifica se e-mail está na lista permitida
+ * Verifica se e-mail está na lista permitida.
+ * Se ALLOWED_EMAILS estiver vazio, qualquer e-mail válido é aceito.
  */
 export function isEmailAllowed(email: string): boolean {
+  if (ALLOWED_EMAILS.length === 0) return true;
   return ALLOWED_EMAILS.includes(email);
+}
+
+// ==========================================================================
+// Códigos de verificação pendentes (memória, expira em 10 min)
+// Em produção usar Redis ou tabela no banco
+// ==========================================================================
+
+type PendingCode = { code: string; expiresAt: number };
+const pendingCodes: Record<string, PendingCode> = {};
+
+export function storePendingCode(email: string, code: string) {
+  pendingCodes[email] = { code, expiresAt: Date.now() + 10 * 60 * 1000 };
+}
+
+export function verifyPendingCode(email: string, code: string): boolean {
+  const entry = pendingCodes[email];
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) {
+    delete pendingCodes[email];
+    return false;
+  }
+  if (entry.code !== code) return false;
+  delete pendingCodes[email]; // consome o código
+  return true;
+}
+
+/**
+ * Busca usuário por e-mail
+ */
+export async function getUserByEmail(email: string) {
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return user || null;
+}
+
+/**
+ * Cria usuário com senha própria (primeiro acesso via código)
+ */
+export async function createUserWithPassword(email: string, password: string, name?: string) {
+  const passwordHash = hashPassword(password);
+  const [user] = await db.insert(users).values({
+    email,
+    name: name || email.split("@")[0],
+    role: "Usuário",
+    initials: email.split("@")[0].substring(0, 2).toUpperCase(),
+    color: "blue",
+    passwordHash,
+  }).returning();
+  return user;
 }
 
 /**

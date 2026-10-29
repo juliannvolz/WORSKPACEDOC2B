@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
-// import { cookies } from "next/headers"; // Removido - causa conflito de build Turbopack/webpack
-// Usaremos alternativa baseada em router + cookie do navegador
+import { cookies } from "next/headers";
 import { db } from "@/db";
 import { activities, events, leads, sessions, tasks, users } from "@/db/schema";
 import { hashPassword, hashToken, verifyPassword } from "@/lib/crypto";
@@ -88,13 +87,8 @@ export async function getIdentity(): Promise<Identity | null> {
   // Lógica simplificada: tenta obter sessão do cookie via request header manual
   // ou utiliza modo demo se configurado
   
-  const cookieStore = await new Promise<Record<string, string>>((resolve) => {
-    // Fallback simples: ler cookie do header 'cookie' manually
-    // ou retornar null para que o modo demo entre em ação
-    resolve({});
-  });
-  
-  const token = cookieStore["doc2b_session"];
+  const cookieStore = await cookies();
+  const token = cookieStore.get("doc2b_session")?.value;
   
   if (token) {
     const [match] = await db.select({ user: users }).from(sessions).innerJoin(users, eq(sessions.userId, users.id))
