@@ -42,11 +42,8 @@ export default async function HomePage() {
                   return;
                 }
 
-                // Guarda o email para usar na verificação
-                (window as any).__doc2bPendingEmail = email;
-                const btn = e.currentTarget.querySelector("button") as HTMLButtonElement;
-                btn.disabled = true;
-                btn.textContent = "Código enviado! Verifique seu e-mail";
+                // Redireciona para a tela de verificação com o e-mail
+                window.location.href = `/verify?email=${encodeURIComponent(email)}`;
               } catch {
                 alert("Erro de conexão. Tente novamente.");
               }
